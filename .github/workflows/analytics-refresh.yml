@@ -2,20 +2,31 @@ name: Refresh Spotify Analytics
 
 on:
   push:
+    branches:
+      - main
     paths:
       - 'data/raw/**'
       - 'src/process_spotify_data.py'
+      - '.github/workflows/analytics-refresh.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# Prevent overlapping runs from stepping on each other
+concurrency:
+  group: analytics-refresh
+  cancel-in-progress: false
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # safer for pushing back
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,7 +36,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # Optional safety: exit cleanly if no raw data folder yet
+      - name: Skip if no raw data
+        run: |
+          if [ ! -d data/raw ]; then
+            echo "No data/raw folder found; nothing to process."
+            exit 0
+          fi
 
       - name: Process data
         run: |
@@ -39,6 +59,9 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
+            # avoid non-fast-forward if something landed between checkout and push
             git commit -m "Auto-refresh analytics [skip ci]"
+            git pull --rebase origin "$GITHUB_REF_NAME" || true
             git push
           fi
+
