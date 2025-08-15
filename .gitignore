@@ -1,0 +1,7 @@
+# Ignore personal data files
+data/raw/
+data/processed/
+data/analytics/
+*.zip
+*.parquet
+*.duckdb
